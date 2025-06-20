@@ -164,7 +164,54 @@ CREATE OR REPLACE PACKAGE BODY employment_module AS
         END IF;
     END remove;
     
+    PROCEDURE get_employees(
+        p_page_number       IN NUMBER,
+        p_page_size         IN NUMBER,
+        p_order_by          IN VARCHAR2,
+        p_result_cursor     OUT SYS_REFCURSOR,
+        p_total_records     OUT NUMBER,
+        p_total_pages       OUT NUMBER,
+        p_page_count        OUT NUMBER
+    ) IS
+        v_sql               VARCHAR2(1000);
+        v_offset            NUMBER;
+        v_order             VARCHAR2(50);
     
+    BEGIN
+    
+        -- Validar y establecer orden por defecto
+        IF p_order_by IS NULL OR UPPER(p_order_by) NOT IN ('NAME', 'EMAIL', 'PHONE_NUMBER', 'DATE_OF_JOINING') THEN
+            v_order := 'employee_id';
+        ELSE
+            v_order := LOWER(p_order_by);
+        END IF;
+
+        -- Calcular offset
+        v_offset := (p_page_number - 1) * p_page_size;
+
+        -- Contar total de registros
+        SELECT COUNT(*) INTO p_total_records FROM employees;
+
+        -- Calcular total de páginas
+        p_total_pages := CEIL(p_total_records / p_page_size);
+
+        -- Construir SQL dinámico con paginación
+        v_sql := '
+            SELECT *
+              FROM employees
+          ORDER BY ' || v_order || '
+            OFFSET :1 ROWS FETCH NEXT :2 ROWS ONLY';
+
+        -- Abrir cursor con los resultados paginados
+        OPEN p_result_cursor FOR v_sql USING v_offset, p_page_size;
+
+        -- Calcular cuántos registros tiene esta página (por si es la última y está incompleta)
+        IF v_offset + p_page_size > p_total_records THEN
+            p_page_count := GREATEST(p_total_records - v_offset, 0);
+        ELSE
+            p_page_count := p_page_size;
+        END IF;
+    END get_employees;
     
 END employment_module;
 /
